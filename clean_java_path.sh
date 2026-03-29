@@ -1,5 +1,4 @@
 CURRENT_PATH=$1
-NEW_JAVA_PATH=$2
 
 function __path_remove(){  
     local P="$2"
@@ -14,6 +13,4 @@ for java_path in `which -a java`; do
     CURRENT_PATH=`__path_remove "$java_path" "$CURRENT_PATH"`
     CURRENT_PATH=`__path_remove "$java_path/" "$CURRENT_PATH"`
 done
-CURRENT_PATH="$NEW_JAVA_PATH:$CURRENT_PATH"
-echo "export JAVA_HOME=\"$NEW_JAVA_PATH\""
-echo "export PATH=\"$CURRENT_PATH\""
+echo $CURRENT_PATH
