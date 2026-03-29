@@ -7,6 +7,12 @@ pjvm <version string>
 
 The tool will search the configured paths for a JDK installation that is in a path containing the provided version string.
 
+## Supported Platforms
+
+The tool has only been tested on Windows for the following shells:
+- Git Bash
+- PowerShell 7.x
+
 
 ## Configuration
 
@@ -53,6 +59,6 @@ pjvm_install.ps1 -Shell powershell | Invoke-Expression
   - `%userprofile%\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1` Powershell 5
   - `%userprofile%\Documents\PowerShell\Microsoft.PowerShell_profile.ps1` Powershell 6+
 - To create the profile file you can run this in PowerShell:
-```
-if (-not (Test-Path $profile)) { New-Item $profile -Force }
-```
+  ```
+  if (-not (Test-Path $profile)) { New-Item $profile -Force }
+  ```
