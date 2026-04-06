@@ -1,8 +1,7 @@
 package main
 
-import _ "embed"
-
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,7 +13,7 @@ const ShellPjvmExecPlaceholder = "@@@PJVM_EXEC@@@"
 
 type Shell interface {
 	SetJavaHome(javaHome string) ([]string, error)
-	InstallCommand() string
+	EnvCommand() string
 
 	// WriteOutput(msg string, args ...string) string
 	// WriteError(msg string, args ...string) string
@@ -84,7 +83,7 @@ type Powershell struct{}
 //go:embed powershell_install.ps1
 var powershellInstallScript string
 
-func (shell Powershell) InstallCommand() string {
+func (shell Powershell) EnvCommand() string {
 	return powershellInstallScript
 }
 
@@ -109,7 +108,7 @@ type GitBash struct{}
 //go:embed gitbash_install.sh
 var gitbashInstallScript string
 
-func (shell GitBash) InstallCommand() string {
+func (shell GitBash) EnvCommand() string {
 	return gitbashInstallScript
 }
 
