@@ -25,7 +25,7 @@ type GenerateShellCommands func(shell Shell) ([]string, error)
 func GetShell(shellType string) (Shell, error) {
 	switch shellType {
 	case "PowerShell":
-		return Powershell{}, nil
+		return PowerShell{}, nil
 	case "GitBash":
 		return GitBash{}, nil
 	default:
@@ -78,16 +78,16 @@ func ExecutableDir() (string, error) {
 
 }
 
-type Powershell struct{}
+type PowerShell struct{}
 
 //go:embed powershell_install.ps1
 var powershellInstallScript string
 
-func (shell Powershell) EnvCommand() string {
+func (shell PowerShell) EnvCommand() string {
 	return powershellInstallScript
 }
 
-func (shell Powershell) SetJavaHome(javaHome string) ([]string, error) {
+func (shell PowerShell) SetJavaHome(javaHome string) ([]string, error) {
 	script_home, err := ScriptRootDir()
 	if err != nil {
 		return nil, err
@@ -99,7 +99,7 @@ func (shell Powershell) SetJavaHome(javaHome string) ([]string, error) {
 	}, nil
 }
 
-func (shell Powershell) ConvertPath(p string) string {
+func (shell PowerShell) ConvertPath(p string) string {
 	return p
 }
 
