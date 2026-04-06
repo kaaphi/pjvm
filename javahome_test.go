@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"testing"
 	"testing/fstest"
-	"io/fs"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -21,8 +21,8 @@ func (handler TestVolumeFsPathHandler) FromVolumePath(p string) (string, error) 
 	return p, nil
 }
 
-func (handler TestVolumeFsPathHandler) ToVolumePath(p string) (string) {
-	return p
+func (handler TestVolumeFsPathHandler) ToVolumePath(p string) (string, error) {
+	return p, nil
 }
 
 func testFileSystem(paths ...string) fstest.MapFS {
@@ -45,32 +45,35 @@ func testFileSystem(paths ...string) fstest.MapFS {
 
 func TestVersionMatch(t *testing.T) {
 	cases := []struct {
-		javaHome       string
+		javaHome       JavaHome
 		versionMatch   string
 		expectedResult bool
 	}{
-		{javaHome: "java1.8", versionMatch: "", expectedResult: true},
-		{javaHome: "java", versionMatch: "", expectedResult: true},
-		{javaHome: "dir/java", versionMatch: "", expectedResult: true},
-		{javaHome: "dir/java1.8", versionMatch: "1.8", expectedResult: true},
-		{javaHome: "dir/java1.8/subdir", versionMatch: "1.8", expectedResult: false},
-		{javaHome: "java1.8", versionMatch: "1", expectedResult: true},
-		{javaHome: "java1.8", versionMatch: "1.8", expectedResult: true},
-		{javaHome: "java1.8other", versionMatch: "1.8", expectedResult: true},
-		{javaHome: "java17.0.4_9", versionMatch: "1", expectedResult: false},
-		{javaHome: "java17.0.4_9", versionMatch: "17", expectedResult: true},
-		{javaHome: "java17.0.4_9", versionMatch: "17.0", expectedResult: true},
-		{javaHome: "java17.0.4_9", versionMatch: "17.0.4", expectedResult: true},
-		{javaHome: "java17.0.4_9", versionMatch: "17.0.4_9", expectedResult: true},
-		{javaHome: "java17.0.4_9", versionMatch: "17.0.3", expectedResult: false},
-		{javaHome: "java17.0.4_9", versionMatch: "17.1", expectedResult: false},
+		{javaHome: JavaHome{JavaHomePath: "java1.8", JavaVersion: "1.8"}, versionMatch: "", expectedResult: true},
+		{javaHome: JavaHome{JavaHomePath: "java", JavaVersion: ""}, versionMatch: "", expectedResult: false},
+		{javaHome: JavaHome{JavaHomePath: "dir/java", JavaVersion: ""}, versionMatch: "", expectedResult: false},
+		{javaHome: JavaHome{JavaHomePath: "dir/java1.8", JavaVersion: "1.8"}, versionMatch: "1.8", expectedResult: true},
+		{javaHome: JavaHome{JavaHomePath: "dir/java1.8/subdir", JavaVersion: ""}, versionMatch: "1.8", expectedResult: false},
+		{javaHome: JavaHome{JavaHomePath: "java1.8", JavaVersion: "1.8"}, versionMatch: "1", expectedResult: true},
+		{javaHome: JavaHome{JavaHomePath: "java1.8", JavaVersion: "1.8"}, versionMatch: "1.8", expectedResult: true},
+		{javaHome: JavaHome{JavaHomePath: "java1.8other", JavaVersion: "1.8"}, versionMatch: "1.8", expectedResult: true},
+		{javaHome: JavaHome{JavaHomePath: "java17.0.4_9", JavaVersion: ""}, versionMatch: "1", expectedResult: false},
+		{javaHome: JavaHome{JavaHomePath: "java17.0.4_9", JavaVersion: "17.0.4_9"}, versionMatch: "17", expectedResult: true},
+		{javaHome: JavaHome{JavaHomePath: "java17.0.4_9", JavaVersion: "17.0.4_9"}, versionMatch: "17.0", expectedResult: true},
+		{javaHome: JavaHome{JavaHomePath: "java17.0.4_9", JavaVersion: "17.0.4_9"}, versionMatch: "17.0.4", expectedResult: true},
+		{javaHome: JavaHome{JavaHomePath: "java17.0.4_9", JavaVersion: "17.0.4_9"}, versionMatch: "17.0.4_9", expectedResult: true},
+		{javaHome: JavaHome{JavaHomePath: "java17.0.4_9", JavaVersion: "17.0.4_9"}, versionMatch: "17.0.3", expectedResult: false},
+		{javaHome: JavaHome{JavaHomePath: "java17.0.4_9", JavaVersion: "17.0.4_9"}, versionMatch: "17.1", expectedResult: false},
 	}
-
-	assert := assert.New(t)
 
 	for _, tt := range cases {
 		t.Run(fmt.Sprintf("%s, %s", tt.javaHome, tt.versionMatch), func(t *testing.T) {
-			assert.Equal(tt.expectedResult, versionMatches(tt.javaHome, tt.versionMatch))
+			version, matches := versionMatches(tt.javaHome.JavaHomePath, tt.versionMatch)
+
+			assert.Equal(t, tt.expectedResult, matches)
+			if matches {
+				assert.Equal(t, tt.javaHome.JavaVersion, version)
+			}
 		})
 	}
 }
@@ -83,9 +86,11 @@ func TestFindJavaVersions(t *testing.T) {
 
 	handler := TestVolumeFsPathHandler{rootFs: fsys}
 
-	actual := findJavaVersions([]string{"dir1"}, "", func(p string) VolumeFsPathHandler {
+	actual, err := findJavaVersions([]string{"dir1"}, "", func(p string) VolumeFsPathHandler {
 		return handler
 	})
 
-	assert.Equal(t, []string{"dir1/java1.8"}, actual)
+	assert.Nil(t, err)
+
+	assert.Equal(t, []JavaHome{JavaHome{JavaHomePath: "dir1/java1.8", JavaVersion: "1.8"}}, actual)
 }
