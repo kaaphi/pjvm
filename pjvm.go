@@ -149,7 +149,7 @@ func main() {
 			},
 			{
 				Name:  "use",
-				Usage: "use the specific Java version",
+				Usage: "use the specified Java version",
 				Arguments: []cli.Argument{
 					&cli.StringArg{
 						Name:      "version",
