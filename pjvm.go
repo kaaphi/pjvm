@@ -13,8 +13,31 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-type PjvmConfg struct {
-	BasePaths []string
+type PjvmConfig struct {
+	BasePaths  []string
+	ConfigPath string
+}
+
+type PjvmContext struct {
+	config             PjvmConfig
+	fileSystemSupplier VolumeFsSupplier
+	cache              JavaHomeCache
+	cacheEncoder       JavaHomeCacheEncoder
+}
+
+func (context *PjvmContext) StoreCache() error {
+	return context.cacheEncoder.StoreCache(context, &context.cache)
+}
+
+func (context *PjvmContext) LoadCache() (*JavaHomeCache, error) {
+	cache, err := context.cacheEncoder.LoadCache(context)
+	if err == nil {
+		if cache == nil {
+			return nil, fmt.Errorf("Failed to load cache, LoadCache returned nil!")
+		}
+		context.cache = *cache
+	}
+	return cache, err
 }
 
 func PjvmEnv(ctx context.Context, cmd *cli.Command) error {
@@ -38,15 +61,14 @@ func PjvmEnv(ctx context.Context, cmd *cli.Command) error {
 	return nil
 }
 
-func PjvmUse(ctx context.Context, cmd *cli.Command) error {
-	config, err := loadConfig(cmd)
+func PjvmUse(_ context.Context, cmd *cli.Command) error {
+	context, err := loadContext(cmd)
 	if err != nil {
 		return err
 	}
 
-	version_specifier := cmd.StringArg("version")
-
-	javaHomes, err := findJavaVersions(config.BasePaths, version_specifier, WindowsVolume)
+	versionSpecifier := cmd.StringArg("version")
+	javaHomes, err := FindJdks(context, versionSpecifier)
 
 	if err != nil {
 		return err
@@ -54,7 +76,7 @@ func PjvmUse(ctx context.Context, cmd *cli.Command) error {
 
 	numMatches := len(javaHomes)
 	if numMatches == 0 {
-		return fmt.Errorf("No Java versions found matching <%s>", version_specifier)
+		return fmt.Errorf("No Java versions found matching <%s>", versionSpecifier)
 	} else if numMatches > 1 {
 		fmt.Printf("Found %d version matches:\n", numMatches)
 		for _, javaHome := range javaHomes {
@@ -75,13 +97,13 @@ func PjvmUse(ctx context.Context, cmd *cli.Command) error {
 }
 
 func PjvmList(ctx context.Context, cmd *cli.Command) error {
-	config, err := loadConfig(cmd)
+	context, err := loadContext(cmd)
 
 	if err != nil {
 		return err
 	}
 
-	javaHomes, err := findJavaVersions(config.BasePaths, "", WindowsVolume)
+	javaHomes, err := FindAllJdks(context)
 
 	if err != nil {
 		return err
@@ -93,8 +115,27 @@ func PjvmList(ctx context.Context, cmd *cli.Command) error {
 	return nil
 }
 
-func loadConfig(cmd *cli.Command) (PjvmConfg, error) {
-	var cfg PjvmConfg
+func loadContext(cmd *cli.Command) (PjvmContext, error) {
+	context := PjvmContext{
+		fileSystemSupplier: WindowsVolume,
+		cacheEncoder:       FileSystemCacheEncoder{},
+	}
+	cfg, err := loadConfig(cmd)
+	if err != nil {
+		return context, fmt.Errorf("Failed to load config: %w", err)
+	}
+
+	context.config = cfg
+
+	if _, err := context.LoadCache(); err != nil {
+		return context, fmt.Errorf("Failed to load cache: %w", err)
+	}
+
+	return context, nil
+}
+
+func loadConfig(cmd *cli.Command) (PjvmConfig, error) {
+	var cfg PjvmConfig
 	configFile := cmd.String("config")
 
 	if configFile == "" {
@@ -118,6 +159,10 @@ func loadConfig(cmd *cli.Command) (PjvmConfg, error) {
 
 	if err := toml.Unmarshal(content, &cfg); err != nil {
 		return cfg, err
+	}
+
+	if cfg.ConfigPath == "" {
+		cfg.ConfigPath = filepath.Dir(configFile)
 	}
 
 	return cfg, nil

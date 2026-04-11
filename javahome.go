@@ -1,18 +1,124 @@
 package main
 
 import (
+	"cmp"
+	"encoding/gob"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 )
 
+const CacheFileName = ".pjvm_cache"
+
 var VersionPattern = regexp.MustCompile(`\d+([.-_]\d+)*`)
+
+type JavaHomeCache struct {
+	Jdks []JavaHome
+}
+
+type JavaHomeCacheEncoder interface {
+	StoreCache(context *PjvmContext, cache *JavaHomeCache) error
+	LoadCache(context *PjvmContext) (*JavaHomeCache, error)
+}
+
+type FileSystemCacheEncoder struct{}
+
+func fullJavaHomeCompare(a JavaHome, b JavaHome) int {
+	if c := cmp.Compare(a.JavaVersion, b.JavaVersion); c == 0 {
+		return cmp.Compare(a.JavaHomePath, b.JavaHomePath)
+	} else {
+		return c
+	}
+}
+
+func versionJavaHomeCompare(a JavaHome, b JavaHome) int {
+	return cmp.Compare(a.JavaVersion, b.JavaVersion)
+}
+
+func (cache *JavaHomeCache) SetJdks(jdks []JavaHome) {
+	slices.SortFunc(jdks, fullJavaHomeCompare)
+	cache.Jdks = jdks
+}
+
+func (cache *JavaHomeCache) AddJdk(jdk JavaHome) {
+	i, found := slices.BinarySearchFunc(cache.Jdks, jdk, fullJavaHomeCompare)
+
+	if !found {
+		cache.Jdks = slices.Insert(cache.Jdks, i, jdk)
+	}
+}
+
+func (cache *JavaHomeCache) FindJdks(versionSpecifier string) []JavaHome {
+	i, _ := slices.BinarySearchFunc(cache.Jdks, JavaHome{JavaVersion: versionSpecifier}, versionJavaHomeCompare)
+
+	result := make([]JavaHome, 0, 2)
+	for ; i < len(cache.Jdks); i++ {
+		suffix, matches := strings.CutPrefix(cache.Jdks[i].JavaVersion, versionSpecifier)
+		if matches {
+			first_rune, _ := utf8.DecodeRuneInString(suffix)
+			if !unicode.IsDigit(first_rune) {
+				result = append(result, cache.Jdks[i])
+			} else {
+				break
+			}
+		} else {
+			break
+		}
+	}
+	return result
+}
+
+func (_ FileSystemCacheEncoder) StoreCache(context *PjvmContext, cache *JavaHomeCache) error {
+	cacheFile := filepath.Join(context.config.ConfigPath, CacheFileName)
+
+	file, err := os.Create(cacheFile)
+	if err != nil {
+		return err
+	}
+
+	defer file.Close()
+
+	// Create the encoder
+	encoder := gob.NewEncoder(file)
+
+	// Encode the object
+	if err := encoder.Encode(cache); err != nil {
+		return fmt.Errorf("Failed to encode cache: %w", err)
+	}
+
+	return nil
+}
+
+func (_ FileSystemCacheEncoder) LoadCache(context *PjvmContext) (*JavaHomeCache, error) {
+	cacheFile := filepath.Join(context.config.ConfigPath, CacheFileName)
+
+	file, err := os.Open(cacheFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &JavaHomeCache{}, nil
+		}
+		return nil, fmt.Errorf("Could not open file %s: %w", cacheFile, err)
+	}
+
+	defer file.Close()
+
+	decoder := gob.NewDecoder(file)
+
+	cache := JavaHomeCache{}
+	if err := decoder.Decode(&cache); err != nil {
+		return nil, fmt.Errorf("Failed to decode cache from file %s: %w", cacheFile, err)
+	}
+
+	return &cache, nil
+}
 
 type JavaHome struct {
 	JavaHomePath string
@@ -22,8 +128,12 @@ type JavaHome struct {
 type VolumeFsSupplier func(p string) VolumeFsPathHandler
 
 type VolumeFsPathHandler interface {
+	// Convert the given platform-specific path that might have a specific volume (e.g. C:\my\path) to a slash path
+	// relative to the volume (e.g. my/path) that can be used to reference the path in the RootFS.
 	FromVolumePath(path string) (string, error)
+	// Convert a slash path to a platform-specific path that includes the volume
 	ToVolumePath(path string) (string, error)
+	// The file system
 	RootFS() fs.StatFS
 }
 
@@ -84,18 +194,56 @@ func versionMatches(javaHome string, versionMatcher string) (string, bool) {
 	}
 }
 
-func findJavaVersions(paths []string, version string, volumeFsSupplier VolumeFsSupplier) ([]JavaHome, error) {
-	var estimated_capacity int
-	if version == "" {
-		estimated_capacity = 2
-	} else {
-		estimated_capacity = len(paths) * 2
+func FindAllJdks(context PjvmContext) ([]JavaHome, error) {
+	matches, err := findJdksInPaths(context.config.BasePaths, "", context.fileSystemSupplier)
+	if err != nil {
+		return nil, err
 	}
-	var all_matches []JavaHome = make([]JavaHome, 0, estimated_capacity)
 
-	for _, base_path := range paths {
-		pathHandler := volumeFsSupplier(base_path)
-		basePath, err := pathHandler.FromVolumePath(base_path)
+	for _, m := range matches {
+		context.cache.AddJdk(m)
+	}
+	if len(matches) > 0 {
+		context.StoreCache()
+	}
+
+	return context.cache.Jdks, nil
+}
+
+func FindJdks(context PjvmContext, versionSpecifier string) ([]JavaHome, error) {
+	matches := context.cache.FindJdks(versionSpecifier)
+
+	if len(matches) == 0 {
+		matches, err := findJdksInPaths(context.config.BasePaths, versionSpecifier, context.fileSystemSupplier)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, m := range matches {
+			context.cache.AddJdk(m)
+		}
+		if len(matches) > 0 {
+			context.StoreCache()
+		}
+
+		return matches, nil
+	} else {
+		return matches, nil
+	}
+}
+
+func findJdksInPaths(paths []string, version string, volumeFsSupplier VolumeFsSupplier) ([]JavaHome, error) {
+	var estimatedCapacity int
+	if version == "" {
+		estimatedCapacity = 2
+	} else {
+		estimatedCapacity = len(paths) * 2
+	}
+	var allMatches []JavaHome = make([]JavaHome, 0, estimatedCapacity)
+
+	for _, basePath := range paths {
+		pathHandler := volumeFsSupplier(basePath)
+		basePath, err := pathHandler.FromVolumePath(basePath)
 
 		if err != nil {
 			return nil, err
@@ -114,7 +262,7 @@ func findJavaVersions(paths []string, version string, volumeFsSupplier VolumeFsS
 						return err
 					}
 
-					all_matches = append(all_matches, JavaHome{JavaHomePath: volumePath, JavaVersion: javaVersion})
+					allMatches = append(allMatches, JavaHome{JavaHomePath: volumePath, JavaVersion: javaVersion})
 				}
 				return fs.SkipDir
 			}
@@ -127,5 +275,5 @@ func findJavaVersions(paths []string, version string, volumeFsSupplier VolumeFsS
 		}
 	}
 
-	return all_matches, nil
+	return allMatches, nil
 }
