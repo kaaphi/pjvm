@@ -233,17 +233,17 @@ func FindJdks(context PjvmContext, versionSpecifier string) ([]JavaHome, error) 
 }
 
 func findJdksInPaths(paths []string, version string, volumeFsSupplier VolumeFsSupplier) ([]JavaHome, error) {
-	var estimated_capacity int
+	var estimatedCapacity int
 	if version == "" {
-		estimated_capacity = 2
+		estimatedCapacity = 2
 	} else {
-		estimated_capacity = len(paths) * 2
+		estimatedCapacity = len(paths) * 2
 	}
-	var all_matches []JavaHome = make([]JavaHome, 0, estimated_capacity)
+	var allMatches []JavaHome = make([]JavaHome, 0, estimatedCapacity)
 
-	for _, base_path := range paths {
-		pathHandler := volumeFsSupplier(base_path)
-		basePath, err := pathHandler.FromVolumePath(base_path)
+	for _, basePath := range paths {
+		pathHandler := volumeFsSupplier(basePath)
+		basePath, err := pathHandler.FromVolumePath(basePath)
 
 		if err != nil {
 			return nil, err
@@ -262,7 +262,7 @@ func findJdksInPaths(paths []string, version string, volumeFsSupplier VolumeFsSu
 						return err
 					}
 
-					all_matches = append(all_matches, JavaHome{JavaHomePath: volumePath, JavaVersion: javaVersion})
+					allMatches = append(allMatches, JavaHome{JavaHomePath: volumePath, JavaVersion: javaVersion})
 				}
 				return fs.SkipDir
 			}
@@ -275,5 +275,5 @@ func findJdksInPaths(paths []string, version string, volumeFsSupplier VolumeFsSu
 		}
 	}
 
-	return all_matches, nil
+	return allMatches, nil
 }
