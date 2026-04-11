@@ -34,7 +34,7 @@ func GetShell(shellType string) (Shell, error) {
 	case "GitBash":
 		return GitBash{}, nil
 	default:
-		return nil, fmt.Errorf("Unsupported shell <%s>", shellType)
+		return nil, fmt.Errorf("unsupported shell <%s>", shellType)
 	}
 }
 

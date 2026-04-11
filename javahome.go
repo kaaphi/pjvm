@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -76,7 +77,7 @@ func (cache *JavaHomeCache) FindJdks(versionSpecifier string) []JavaHome {
 	return result
 }
 
-func (_ FileSystemCacheEncoder) StoreCache(context *PjvmContext, cache *JavaHomeCache) error {
+func (FileSystemCacheEncoder) StoreCache(context *PjvmContext, cache *JavaHomeCache) error {
 	cacheFile := filepath.Join(context.config.ConfigPath, CacheFileName)
 
 	file, err := os.Create(cacheFile)
@@ -84,20 +85,24 @@ func (_ FileSystemCacheEncoder) StoreCache(context *PjvmContext, cache *JavaHome
 		return err
 	}
 
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Fatalf("Failed to close %s after storing cache: %s", cacheFile, err)
+		}
+	}()
 
 	// Create the encoder
 	encoder := gob.NewEncoder(file)
 
 	// Encode the object
 	if err := encoder.Encode(cache); err != nil {
-		return fmt.Errorf("Failed to encode cache: %w", err)
+		return fmt.Errorf("failed to encode cache: %w", err)
 	}
 
 	return nil
 }
 
-func (_ FileSystemCacheEncoder) LoadCache(context *PjvmContext) (*JavaHomeCache, error) {
+func (FileSystemCacheEncoder) LoadCache(context *PjvmContext) (*JavaHomeCache, error) {
 	cacheFile := filepath.Join(context.config.ConfigPath, CacheFileName)
 
 	file, err := os.Open(cacheFile)
@@ -105,16 +110,20 @@ func (_ FileSystemCacheEncoder) LoadCache(context *PjvmContext) (*JavaHomeCache,
 		if os.IsNotExist(err) {
 			return &JavaHomeCache{}, nil
 		}
-		return nil, fmt.Errorf("Could not open file %s: %w", cacheFile, err)
+		return nil, fmt.Errorf("could not open file %s: %w", cacheFile, err)
 	}
 
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Fatalf("Failed to close %s after loading cache: %s", cacheFile, err)
+		}
+	}()
 
 	decoder := gob.NewDecoder(file)
 
 	cache := JavaHomeCache{}
 	if err := decoder.Decode(&cache); err != nil {
-		return nil, fmt.Errorf("Failed to decode cache from file %s: %w", cacheFile, err)
+		return nil, fmt.Errorf("failed to decode cache from file %s: %w", cacheFile, err)
 	}
 
 	return &cache, nil
@@ -204,7 +213,9 @@ func FindAllJdks(context PjvmContext) ([]JavaHome, error) {
 		context.cache.AddJdk(m)
 	}
 	if len(matches) > 0 {
-		context.StoreCache()
+		if err := context.StoreCache(); err != nil {
+			log.Fatalf("Failed to store cache: %s", err)
+		}
 	}
 
 	return context.cache.Jdks, nil
@@ -223,7 +234,9 @@ func FindJdks(context PjvmContext, versionSpecifier string) ([]JavaHome, error) 
 			context.cache.AddJdk(m)
 		}
 		if len(matches) > 0 {
-			context.StoreCache()
+			if err := context.StoreCache(); err != nil {
+				log.Fatalf("Failed to store cache: %s", err)
+			}
 		}
 
 		return matches, nil
@@ -239,7 +252,7 @@ func findJdksInPaths(paths []string, version string, volumeFsSupplier VolumeFsSu
 	} else {
 		estimatedCapacity = len(paths) * 2
 	}
-	var allMatches []JavaHome = make([]JavaHome, 0, estimatedCapacity)
+	allMatches := make([]JavaHome, 0, estimatedCapacity)
 
 	for _, basePath := range paths {
 		pathHandler := volumeFsSupplier(basePath)
