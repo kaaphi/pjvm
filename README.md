@@ -19,9 +19,11 @@ The tool has only been tested on Windows for the following shells:
 pjvm reads from a TOML file:
 
 ```toml
-basePaths = [
-    # an array of strings containing the base paths to look for JDK installations within
-]
+# An array of strings containing the base paths to look for JDK installations within, required.
+basePaths = []
+
+# The path to store internal configuration files (e.g. cache files), optional. If not set, the parent directory of the config file is used.
+configPath = ""
 ```
 
 The base paths are searched recursively, so if all your JDKs are installed in `C:\tools\java`, you can enter just that one path in the config.
@@ -35,14 +37,14 @@ You can override the config file location by setting the `PJVM_CONFIG` environme
 
 Add the following to your `.bashrc` profile (change `pjvm` to include the full path where you've installed pjvm):
 ```bash
-eval "`pjvm install -shell GitBash`"
+eval "`pjvm env -shell GitBash`"
 ```
 
 ### PowerShell
 
 Add the following to your end of your profile (change `pjvm.exe` to include the full path where you've installed pjvm):
 ```powershell
-pjvm.exe install -shell PowerShell | Out-String | Invoke-Expression
+pjvm.exe env -shell PowerShell | Out-String | Invoke-Expression
 ```
 
 - For Windows location is either:
