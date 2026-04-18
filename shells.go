@@ -3,8 +3,13 @@ package main
 import (
 	_ "embed"
 	"fmt"
+	"log"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
+
+	"github.com/hairyhenderson/go-which"
 )
 
 const ShellCommandStartMarker = "@@@START_SHELL@@@"
@@ -12,11 +17,11 @@ const ShellCommandEndMarker = "@@@END_SHELL@@@"
 const ShellPjvmExecPlaceholder = "@@@PJVM_EXEC@@@"
 
 type Shell interface {
+	// Returns a slice of stings containing the correct shell commands to evaluate in order to update JAVA_HOME and PATH environment variables for the given javaHome location.
 	SetJavaHome(javaHome string) ([]string, error)
+	// Returns a string containing the correct shell commands to evaluate in order to set up the pjvm tool in the shell.
 	EnvCommand() string
-
-	// WriteOutput(msg string, args ...string) string
-	// WriteError(msg string, args ...string) string
+	// Converts the given os-native path to the correct type of path string to use in the shell.
 	ConvertPath(p string) string
 }
 
@@ -29,7 +34,7 @@ func GetShell(shellType string) (Shell, error) {
 	case "GitBash":
 		return GitBash{}, nil
 	default:
-		return nil, fmt.Errorf("Unsupported shell %s", shellType)
+		return nil, fmt.Errorf("Unsupported shell <%s>", shellType)
 	}
 }
 
@@ -51,16 +56,6 @@ func ShellCommands(shellType string, commands GenerateShellCommands) error {
 	fmt.Println(ShellCommandEndMarker)
 
 	return nil
-}
-
-func ScriptRootDir() (string, error) {
-	script_home := os.Getenv("PJVM_SCRIPT_HOME")
-
-	if script_home == "" {
-		return ExecutableDir()
-	} else {
-		return script_home, nil
-	}
 }
 
 func ExecutableDir() (string, error) {
@@ -88,14 +83,12 @@ func (shell PowerShell) EnvCommand() string {
 }
 
 func (shell PowerShell) SetJavaHome(javaHome string) ([]string, error) {
-	script_home, err := ScriptRootDir()
-	if err != nil {
-		return nil, err
-	}
+	pathEnv := UpdateJavaHomeInPath(javaHome)
+	pathString := strings.Join(pathEnv, string(os.PathListSeparator))
 
 	return []string{
 		fmt.Sprintf(`$Env:JAVA_HOME="%s"`, javaHome),
-		fmt.Sprintf(`$Env:PATH="%s\bin;$(%s\clean_java_path.ps1)"`, javaHome, script_home),
+		fmt.Sprintf(`$Env:PATH="%s"`, pathString),
 	}, nil
 }
 
@@ -113,18 +106,95 @@ func (shell GitBash) EnvCommand() string {
 }
 
 func (shell GitBash) SetJavaHome(javaHome string) ([]string, error) {
-	script_home, err := ScriptRootDir()
-	if err != nil {
-		return nil, err
+	pathEnv := UpdateJavaHomeInPath(javaHome)
+	for i, p := range pathEnv {
+		pathEnv[i] = shell.ConvertPath(p)
 	}
+	pathString := strings.Join(pathEnv, ":")
 
 	return []string{
-		fmt.Sprintf(`PJVM_HOME="%s"`, shell.ConvertPath(script_home)),
-		fmt.Sprintf(`export JAVA_HOME="%s"`, shell.ConvertPath(javaHome)),
-		fmt.Sprintf(`export PATH="$JAVA_HOME/bin:%s$PJVM_HOME/clean_java_path.sh "$PATH"%s"`, "`", "`"),
+		fmt.Sprintf(`export JAVA_HOME="%s"`, javaHome),
+		fmt.Sprintf(`export PATH="%s"`, pathString),
 	}, nil
 }
 
+// Converts the path from a windows-style path string to the types of paths used by Git Bash (similar to what the "cygpath -u" command does)
 func (shell GitBash) ConvertPath(p string) string {
-	return fmt.Sprintf("`cygpath -u \"%s\"`", p)
+	rawV := filepath.VolumeName(p)
+	v, isDrive := strings.CutSuffix(rawV, ":")
+	if isDrive {
+		v = `/` + strings.ToLower(v)
+		rawV = rawV + `\`
+	} else {
+		v = filepath.ToSlash(rawV)
+	}
+
+	rel, err := filepath.Rel(rawV, p)
+	if err != nil {
+		log.Fatalf("Failed to convert path: %s", err)
+	}
+	rel = filepath.ToSlash(rel)
+	return v + `/` + rel
+}
+
+// An interface for manipulating file system paths
+type FilePaths interface {
+	Join(elem ...string) string
+	Dir(path string) string
+	Clean(path string) string
+}
+
+// Manipulate file system paths using the path/filepath system library (uses os-native semantics)
+type SystemFilePaths struct{}
+
+func (SystemFilePaths) Join(elem ...string) string {
+	return filepath.Join(elem...)
+}
+
+func (SystemFilePaths) Dir(path string) string {
+	return filepath.Dir(path)
+}
+
+func (SystemFilePaths) Clean(path string) string {
+	return filepath.Clean(path)
+}
+
+// Manipulate file system paths using the path system library (uses Go-style forward slash paths)
+type GoFilePaths struct{}
+
+func (GoFilePaths) Join(elem ...string) string {
+	return path.Join(elem...)
+}
+
+func (GoFilePaths) Dir(p string) string {
+	return path.Dir(p)
+}
+
+func (GoFilePaths) Clean(p string) string {
+	return path.Clean(p)
+}
+
+// Returns a slice containing updated paths for the PATH environment variable such that the given javaHome is on the path and any other existing java paths have been removed
+func UpdateJavaHomeInPath(javaHome string) []string {
+	rawPath := os.Getenv("PATH")
+	pathSep := string(os.PathListSeparator)
+	newEnvPath := updateJavaHomeInPath(strings.Split(rawPath, pathSep), which.All("java.exe"), javaHome, SystemFilePaths{})
+
+	return newEnvPath
+}
+
+// Returns a slice containing the same paths as envPath except all paths containing the javasOnPath paths have been removed and newJavaHome has been added
+func updateJavaHomeInPath(envPath []string, javasOnPath []string, newJavaHome string, filepaths FilePaths) []string {
+	newEnvPath := make([]string, 1, len(envPath)-len(javasOnPath)+1)
+	newEnvPath[0] = filepaths.Join(newJavaHome, "bin")
+
+	for _, p := range envPath {
+		for _, j := range javasOnPath {
+			if filepaths.Dir(j) != filepaths.Clean(p) {
+				newEnvPath = append(newEnvPath, p)
+			}
+		}
+	}
+
+	return newEnvPath
 }

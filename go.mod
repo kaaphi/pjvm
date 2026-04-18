@@ -3,6 +3,7 @@ module kaaphi.com/pjvm
 go 1.26.1
 
 require (
+	github.com/hairyhenderson/go-which v0.2.2
 	github.com/pelletier/go-toml/v2 v2.3.0
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v3 v3.8.0
