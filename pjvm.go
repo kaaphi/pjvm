@@ -33,7 +33,7 @@ func (context *PjvmContext) LoadCache() (*JavaHomeCache, error) {
 	cache, err := context.cacheEncoder.LoadCache(context)
 	if err == nil {
 		if cache == nil {
-			return nil, fmt.Errorf("Failed to load cache, LoadCache returned nil!")
+			return nil, fmt.Errorf("encoder loaded nil cache")
 		}
 		context.cache = *cache
 	}
@@ -49,7 +49,6 @@ func PjvmEnv(ctx context.Context, cmd *cli.Command) error {
 	env := shell.EnvCommand()
 
 	exec, err := os.Executable()
-
 	if err != nil {
 		return err
 	}
@@ -69,14 +68,13 @@ func PjvmUse(_ context.Context, cmd *cli.Command) error {
 
 	versionSpecifier := cmd.StringArg("version")
 	javaHomes, err := FindJdks(context, versionSpecifier)
-
 	if err != nil {
 		return err
 	}
 
 	numMatches := len(javaHomes)
 	if numMatches == 0 {
-		return fmt.Errorf("No Java versions found matching <%s>", versionSpecifier)
+		return fmt.Errorf("no Java versions found matching <%s>", versionSpecifier)
 	} else if numMatches > 1 {
 		fmt.Printf("Found %d version matches:\n", numMatches)
 		for _, javaHome := range javaHomes {
@@ -98,13 +96,11 @@ func PjvmUse(_ context.Context, cmd *cli.Command) error {
 
 func PjvmList(ctx context.Context, cmd *cli.Command) error {
 	context, err := loadContext(cmd)
-
 	if err != nil {
 		return err
 	}
 
 	javaHomes, err := FindAllJdks(context)
-
 	if err != nil {
 		return err
 	}
@@ -122,13 +118,13 @@ func loadContext(cmd *cli.Command) (PjvmContext, error) {
 	}
 	cfg, err := loadConfig(cmd)
 	if err != nil {
-		return context, fmt.Errorf("Failed to load config: %w", err)
+		return context, fmt.Errorf("failed to load config: %w", err)
 	}
 
 	context.config = cfg
 
 	if _, err := context.LoadCache(); err != nil {
-		return context, fmt.Errorf("Failed to load cache: %w", err)
+		return context, fmt.Errorf("failed to load cache: %w", err)
 	}
 
 	return context, nil
@@ -144,7 +140,6 @@ func loadConfig(cmd *cli.Command) (PjvmConfig, error) {
 
 	if configFile == "" {
 		userHome, err := os.UserHomeDir()
-
 		if err != nil {
 			return cfg, err
 		}
