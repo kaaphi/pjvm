@@ -49,7 +49,6 @@ func PjvmEnv(ctx context.Context, cmd *cli.Command) error {
 	env := shell.EnvCommand()
 
 	exec, err := os.Executable()
-
 	if err != nil {
 		return err
 	}
@@ -69,7 +68,6 @@ func PjvmUse(_ context.Context, cmd *cli.Command) error {
 
 	versionSpecifier := cmd.StringArg("version")
 	javaHomes, err := FindJdks(context, versionSpecifier)
-
 	if err != nil {
 		return err
 	}
@@ -98,13 +96,11 @@ func PjvmUse(_ context.Context, cmd *cli.Command) error {
 
 func PjvmList(ctx context.Context, cmd *cli.Command) error {
 	context, err := loadContext(cmd)
-
 	if err != nil {
 		return err
 	}
 
 	javaHomes, err := FindAllJdks(context)
-
 	if err != nil {
 		return err
 	}
@@ -144,7 +140,6 @@ func loadConfig(cmd *cli.Command) (PjvmConfig, error) {
 
 	if configFile == "" {
 		userHome, err := os.UserHomeDir()
-
 		if err != nil {
 			return cfg, err
 		}

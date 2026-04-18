@@ -257,7 +257,6 @@ func findJdksInPaths(paths []string, version string, volumeFsSupplier VolumeFsSu
 	for _, basePath := range paths {
 		pathHandler := volumeFsSupplier(basePath)
 		basePath, err := pathHandler.FromVolumePath(basePath)
-
 		if err != nil {
 			return nil, err
 		}
@@ -270,7 +269,6 @@ func findJdksInPaths(paths []string, version string, volumeFsSupplier VolumeFsSu
 			if isJavaHome(pathHandler.RootFS(), path, d) {
 				if javaVersion, matches := versionMatches(path, version); matches {
 					volumePath, err := pathHandler.ToVolumePath(path)
-
 					if err != nil {
 						return err
 					}
@@ -282,7 +280,6 @@ func findJdksInPaths(paths []string, version string, volumeFsSupplier VolumeFsSu
 
 			return nil
 		})
-
 		if err != nil {
 			return nil, err
 		}

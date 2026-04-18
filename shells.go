@@ -12,9 +12,11 @@ import (
 	"github.com/hairyhenderson/go-which"
 )
 
-const ShellCommandStartMarker = "@@@START_SHELL@@@"
-const ShellCommandEndMarker = "@@@END_SHELL@@@"
-const ShellPjvmExecPlaceholder = "@@@PJVM_EXEC@@@"
+const (
+	ShellCommandStartMarker  = "@@@START_SHELL@@@"
+	ShellCommandEndMarker    = "@@@END_SHELL@@@"
+	ShellPjvmExecPlaceholder = "@@@PJVM_EXEC@@@"
+)
 
 type Shell interface {
 	// Returns a slice of stings containing the correct shell commands to evaluate in order to update JAVA_HOME and PATH environment variables for the given javaHome location.
@@ -70,7 +72,6 @@ func ExecutableDir() (string, error) {
 	}
 
 	return filepath.Dir(exec), nil
-
 }
 
 type PowerShell struct{}
