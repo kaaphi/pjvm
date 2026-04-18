@@ -160,6 +160,13 @@ func loadConfig(cmd *cli.Command) (PjvmConfig, error) {
 		cfg.ConfigPath = filepath.Dir(configFile)
 	}
 
+	for i, p := range cfg.BasePaths {
+		cfg.BasePaths[i], err = filepath.Abs(p)
+		if err != nil {
+			return cfg, fmt.Errorf("Failed to make base path <%s> absolute: %w", p, err)
+		}
+	}
+
 	return cfg, nil
 }
 

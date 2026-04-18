@@ -130,6 +130,25 @@ func isFakeJavaHome(filePath string, d fs.DirEntry) bool {
 	return !errors.Is(error, fs.ErrNotExist)
 }
 
+func Check(ctx context.Context, cmd *cli.Command) error {
+	expectedHomeDir, err := filepath.Abs(cmd.Args().First())
+	if err != nil {
+		return err
+	}
+	exec, err := os.Executable()
+	if err != nil {
+		return err
+	}
+
+	actualHomeDir := filepath.Dir(filepath.Dir(exec))
+
+	if expectedHomeDir != actualHomeDir {
+		log.Fatalf("Expected <%s>, but was <%s>!", expectedHomeDir, actualHomeDir)
+	}
+
+	return nil
+}
+
 func main() {
 	cmd := &cli.Command{
 		Name:  "fakejava",
@@ -150,6 +169,11 @@ func main() {
 				Name:   "install",
 				Usage:  "install into all the subdirectories of the provided path",
 				Action: Install,
+			},
+			{
+				Name:   "check",
+				Usage:  "check to see if this is what we think it is",
+				Action: Check,
 			},
 		},
 	}
