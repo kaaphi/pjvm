@@ -1,1 +1,7 @@
 dist
+
+integrationtest/fakejavas/**/bin
+
+*.exe
+
+.pjvm_cache
