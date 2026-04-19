@@ -60,3 +60,4 @@ jobs:
         run: |
           cd integrationtest/gitbash
           ./gitbash_test.sh
+        shell: bash
