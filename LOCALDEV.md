@@ -11,3 +11,9 @@ go run . env --shell PowerShell | Out-String | Invoke-Expression
 ```bash
 eval "`go run . env -shell GitBash`"
 ```
+
+## Building
+
+```bash
+./build.sh
+```
