@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/hairyhenderson/go-which"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/urfave/cli/v3"
 )
@@ -90,6 +91,18 @@ func PjvmUse(_ context.Context, cmd *cli.Command) error {
 		return err
 	}
 	fmt.Printf("Using Java version %s from %s\n", javaHomes[0].JavaVersion, javaHomes[0].JavaHomePath)
+
+	return nil
+}
+
+func PjvmCurrent(ctx context.Context, cmd *cli.Command) error {
+	javaExe := which.Which("java.exe")
+	javacExe := which.Which("javac.exe")
+	javaHome := os.Getenv("JAVA_HOME")
+
+	fmt.Printf("Java:      %s\n", javaExe)
+	fmt.Printf("Javac:     %s\n", javacExe)
+	fmt.Printf("JAVA_HOME: %s\n", javaHome)
 
 	return nil
 }
@@ -204,6 +217,11 @@ func main() {
 					},
 				},
 				Action: PjvmUse,
+			},
+			{
+				Name:   "current",
+				Usage:  "show the current java paths and JAVA_HOME values",
+				Action: PjvmCurrent,
 			},
 			{
 				Name:   "env",
